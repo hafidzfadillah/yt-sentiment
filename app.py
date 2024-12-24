@@ -11,6 +11,8 @@ from PIL import Image
 import time
 from threading import Thread
 from queue import Queue
+import os
+import tempfile
 
 app = Flask(__name__)
 
@@ -343,7 +345,7 @@ def index():
                    colors=['#28a745', '#dc3545', '#007bff'],
                    startangle=90)
             plt.title('Sentiment Distribution')
-            sentiment_path = 'static/sentiment_distribution.png'
+            sentiment_path = os.path.join('static', 'sentiment_distribution.png')
             plt.savefig(sentiment_path, bbox_inches='tight', dpi=100)
             plt.close()
 
@@ -357,7 +359,7 @@ def index():
                 contour_color='red',
                 contour_width=2
             ).generate(' '.join(all_words))
-            wordcloud_path = 'static/wordcloud.png'
+            wordcloud_path = os.path.join('static', 'wordcloud.png')
             wordcloud.to_file(wordcloud_path)
 
             # Popular Words Distribution (Vertical Bar Chart)
@@ -367,7 +369,7 @@ def index():
             plt.ylabel('Words')
             plt.title('Popular Words Distribution')
             plt.tight_layout()
-            pie_chart_path = 'static/pie_chart.png'
+            pie_chart_path = os.path.join('static', 'pie_chart.png')
             plt.savefig(pie_chart_path, bbox_inches='tight', dpi=100)
             plt.close()
 
@@ -400,6 +402,57 @@ def index():
                          sentiment_image=None,
                          pie_chart_image=None,
                          wordcloud_image=None)
+
+# Configure temp directory for Render
+if os.environ.get('RENDER'):
+    tempfile.tempdir = '/tmp'
+
+# Create static directory
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+if not os.path.exists(STATIC_DIR):
+    os.makedirs(STATIC_DIR)
+
+# Update save_visualizations function
+def save_visualizations(sentiment_counts, word_freq, all_words):
+    try:
+        # Use temporary files for thread safety
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_sentiment, \
+             tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_wordcloud, \
+             tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_barchart:
+            
+            # Sentiment Distribution
+            plt.figure(figsize=(8, 8))
+            plt.pie(sentiment_counts, 
+                   labels=['Positive', 'Negative', 'Neutral'],
+                   autopct='%1.1f%%',
+                   colors=['#28a745', '#dc3545', '#007bff'])
+            plt.title('Sentiment Distribution')
+            plt.savefig(tmp_sentiment.name)
+            plt.close()
+
+            # Word Cloud
+            wordcloud = WordCloud(width=800, height=400, 
+                                background_color='white').generate(' '.join(all_words))
+            wordcloud.to_file(tmp_wordcloud.name)
+
+            # Word Frequency Bar Chart
+            plt.figure(figsize=(10, 6))
+            labels, counts = zip(*word_freq)
+            plt.barh(labels[::-1], counts[::-1])
+            plt.title('Popular Words Distribution')
+            plt.xlabel('Frequency')
+            plt.tight_layout()
+            plt.savefig(tmp_barchart.name)
+            plt.close()
+
+            # Move files to static directory
+            os.rename(tmp_sentiment.name, os.path.join(STATIC_DIR, 'sentiment_distribution.png'))
+            os.rename(tmp_wordcloud.name, os.path.join(STATIC_DIR, 'wordcloud.png'))
+            os.rename(tmp_barchart.name, os.path.join(STATIC_DIR, 'pie_chart.png'))
+            
+    except Exception as e:
+        print(f"Error in save_visualizations: {e}")
+        raise
 
 if __name__ == '__main__':
     app.run(debug=True)
