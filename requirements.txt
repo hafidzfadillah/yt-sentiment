@@ -6,3 +6,4 @@ matplotlib
 pillow
 numpy
 python-dotenv
+gunicorn
