@@ -13,6 +13,12 @@ from threading import Thread
 from queue import Queue
 import os
 import tempfile
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
+
+# Use environment variables in your code
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 
 app = Flask(__name__)
 
@@ -317,9 +323,11 @@ def index():
             df = pd.DataFrame(comments, columns=['Comment'])
             
             # Apply the processing function using parallel processing
-            from multiprocessing import Pool, cpu_count
-            with Pool(processes=cpu_count()) as pool:
-                df['processed_text'] = pool.map(process_all, df['Comment'])
+            # from multiprocessing import Pool, cpu_count
+            # with Pool(processes=cpu_count()) as pool:
+            #     df['processed_text'] = pool.map(process_all, df['Comment'])
+            # Sequential processing instead of parallel
+            df['processed_text'] = df['Comment'].apply(process_all)
             
             # Step 3: Sentiment Analysis
             update_progress(3, "Analyzing sentiment...")
