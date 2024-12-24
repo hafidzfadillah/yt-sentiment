@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import pandas as pd
 from googleapiclient.discovery import build
 import re
@@ -298,6 +298,10 @@ def get_progress():
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    # Ensure static directory exists on each request
+    if not os.path.exists(STATIC_DIR):
+        os.makedirs(STATIC_DIR)
+    
     if request.method == 'POST':
         try:
             reset_progress()
@@ -453,6 +457,10 @@ def save_visualizations(sentiment_counts, word_freq, all_words):
     except Exception as e:
         print(f"Error in save_visualizations: {e}")
         raise
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    return send_from_directory('static', filename)
 
 if __name__ == '__main__':
     app.run(debug=True)
