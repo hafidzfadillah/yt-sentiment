@@ -336,7 +336,7 @@
                     isPolling = false;
                     showError(data.error);
                 } else {
-                    setTimeout(pollProgress, 1000);
+                    setTimeout(pollProgress, 5000);
                 }
             })
             .catch(error => {

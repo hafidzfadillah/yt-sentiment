@@ -1,16 +1,18 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify
 import pandas as pd
 from googleapiclient.discovery import build
 import re
 from collections import Counter
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-import seaborn as sns
+import matplotlib as mpl
+mpl.use('Agg')
+# import seaborn as sns
 import numpy as np
 from PIL import Image
-import time
-from threading import Thread
-from queue import Queue
+# import time
+# from threading import Thread
+# from queue import Queue
 import os
 import tempfile
 from dotenv import load_dotenv
@@ -24,7 +26,7 @@ app = Flask(__name__)
 
 # Your API key
 # api_key = 'AIzaSyD9_6gPUvffWe7ZlZrCdkJsBSb4MfaYTdw'
-api_key = 'AIzaSyDXFZbGCU8qYnDxySaB7CT3AMdgxH2XxY4'
+api_key = YOUTUBE_API_KEY
 
 # Global variables for tracking progress
 progress_data = {
@@ -54,20 +56,25 @@ def extract_video_id(youtube_url):
 
 def video_comments(video_id):
     replies = []
+    limit = 9000
     youtube = build('youtube', 'v3', developerKey=api_key)
     video_response = youtube.commentThreads().list(part='snippet,replies', videoId=video_id).execute()
 
-    while video_response:
+    while video_response and len(replies) < limit:
         for item in video_response['items']:
+            if len(replies) >= limit:
+                return replies[:limit]
             comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
             replies.append(comment)
 
             if 'replies' in item:
                 for reply in item['replies']['comments']:
+                    if len(replies) >= limit:
+                        return replies[:limit]
                     repl = reply['snippet']['textDisplay']
                     replies.append(repl)
 
-        if 'nextPageToken' in video_response:
+        if 'nextPageToken' in video_response and len(replies) < limit:
             video_response = youtube.commentThreads().list(
                 part='snippet,replies',
                 pageToken=video_response['nextPageToken'],
@@ -75,7 +82,7 @@ def video_comments(video_id):
             ).execute()
         else:
             break
-    return replies
+    return replies[:limit]
 
 def get_stopwords():
     # Memuat daftar stopword dari file dan mengembalikan dalam bentuk set
@@ -209,9 +216,10 @@ def stem_kata(kata, kamus):
 
     return kata
 
+
+# Memuat kamus kata dasar
+kamus = load_kamus()
 def stem_text(text):
-    # Memuat kamus kata dasar
-    kamus = load_kamus()
 
     # Memisahkan teks menjadi kata-kata
     kata_kata = text.split()
@@ -350,6 +358,7 @@ def index():
             counts_percentage = [(count / total_count) * 100 for count in counts]
 
             # Sentiment Distribution (Pie Chart)
+            mpl.rcParams['agg.path.chunksize'] = 10000
             plt.figure(figsize=(8, 8))
             plt.pie([total_positive, total_negative, total_neutral], 
                    labels=['Positive', 'Negative', 'Neutral'],
@@ -362,7 +371,7 @@ def index():
             plt.close()
 
             # Word Cloud
-            youtube_logo = np.array(Image.open('static/youtube_logo.png'))
+            youtube_logo = np.array(Image.open(os.path.join('static', 'youtube_logo.png')))
             wordcloud = WordCloud(
                 width=1000, 
                 height=600, 
@@ -416,8 +425,8 @@ def index():
                          wordcloud_image=None)
 
 # Configure temp directory for Render
-if os.environ.get('RENDER'):
-    tempfile.tempdir = '/tmp'
+# if os.environ.get('RENDER'):
+#     tempfile.tempdir = '/tmp'
 
 # Create static directory
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
@@ -425,50 +434,50 @@ if not os.path.exists(STATIC_DIR):
     os.makedirs(STATIC_DIR)
 
 # Update save_visualizations function
-def save_visualizations(sentiment_counts, word_freq, all_words):
-    try:
-        # Use temporary files for thread safety
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_sentiment, \
-             tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_wordcloud, \
-             tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_barchart:
+# def save_visualizations(sentiment_counts, word_freq, all_words):
+#     try:
+#         # Use temporary files for thread safety
+#         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_sentiment, \
+#              tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_wordcloud, \
+#              tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_barchart:
             
-            # Sentiment Distribution
-            plt.figure(figsize=(8, 8))
-            plt.pie(sentiment_counts, 
-                   labels=['Positive', 'Negative', 'Neutral'],
-                   autopct='%1.1f%%',
-                   colors=['#28a745', '#dc3545', '#007bff'])
-            plt.title('Sentiment Distribution')
-            plt.savefig(tmp_sentiment.name)
-            plt.close()
+#             # Sentiment Distribution
+#             plt.figure(figsize=(8, 8))
+#             plt.pie(sentiment_counts, 
+#                    labels=['Positive', 'Negative', 'Neutral'],
+#                    autopct='%1.1f%%',
+#                    colors=['#28a745', '#dc3545', '#007bff'])
+#             plt.title('Sentiment Distribution')
+#             plt.savefig(tmp_sentiment.name)
+#             plt.close()
 
-            # Word Cloud
-            wordcloud = WordCloud(width=800, height=400, 
-                                background_color='white').generate(' '.join(all_words))
-            wordcloud.to_file(tmp_wordcloud.name)
+#             # Word Cloud
+#             wordcloud = WordCloud(width=800, height=400, 
+#                                 background_color='white').generate(' '.join(all_words))
+#             wordcloud.to_file(tmp_wordcloud.name)
 
-            # Word Frequency Bar Chart
-            plt.figure(figsize=(10, 6))
-            labels, counts = zip(*word_freq)
-            plt.barh(labels[::-1], counts[::-1])
-            plt.title('Popular Words Distribution')
-            plt.xlabel('Frequency')
-            plt.tight_layout()
-            plt.savefig(tmp_barchart.name)
-            plt.close()
+#             # Word Frequency Bar Chart
+#             plt.figure(figsize=(10, 6))
+#             labels, counts = zip(*word_freq)
+#             plt.barh(labels[::-1], counts[::-1])
+#             plt.title('Popular Words Distribution')
+#             plt.xlabel('Frequency')
+#             plt.tight_layout()
+#             plt.savefig(tmp_barchart.name)
+#             plt.close()
 
-            # Move files to static directory
-            os.rename(tmp_sentiment.name, os.path.join(STATIC_DIR, 'sentiment_distribution.png'))
-            os.rename(tmp_wordcloud.name, os.path.join(STATIC_DIR, 'wordcloud.png'))
-            os.rename(tmp_barchart.name, os.path.join(STATIC_DIR, 'pie_chart.png'))
+#             # Move files to static directory
+#             os.rename(tmp_sentiment.name, os.path.join(STATIC_DIR, 'sentiment_distribution.png'))
+#             os.rename(tmp_wordcloud.name, os.path.join(STATIC_DIR, 'wordcloud.png'))
+#             os.rename(tmp_barchart.name, os.path.join(STATIC_DIR, 'pie_chart.png'))
             
-    except Exception as e:
-        print(f"Error in save_visualizations: {e}")
-        raise
+#     except Exception as e:
+#         print(f"Error in save_visualizations: {e}")
+#         raise
 
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    return send_from_directory('static', filename)
+# @app.route('/static/<path:filename>')
+# def serve_static(filename):
+#     return send_from_directory('static', filename)
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
